@@ -856,40 +856,24 @@ async function generarPDF(){
     PIC2_SN.forEach((s, k) => { const v = S.ch["3."+(k+1)]; texto(s[1]+":   "+(v===undefined ? "(sin marcar)" : v===0 ? "[X] SÍ   [  ] NO" : "[  ] SÍ   [X] NO"), {indent: 14, after: 1}); });
   }
 
-  // ---------- informe docente ----------
+  // ---------- resumen para el docente (el detalle completo va adentro del PDF) ----------
   if(CONFIG.INFORME_EN_PDF){
-    nueva(); const R = resumen();
-    titulo("Informe para el docente", 15);
-    texto("Datos que registró la página mientras el estudiante hacía la prueba. Son indicios para mirar con cuidado, no pruebas: un número raro puede tener otra explicación.", {size: 9.5, color: GRIS, after: 10});
-    titulo("Resumen", 11.5);
-    tabla([{t:"Dato", w:.45},{t:"Valor", w:.55}], [
-      ["Entrega", est], ["Tiempo usado", dur+" de "+minutosTotales()+" minutos"],
-      ["Salidas de la página", String(R.salidas)], ["Tiempo total afuera", R.segundos_afuera+" s"],
-      ["Intentos de copiar, pegar, clic derecho o atajos", String(R.intentos_copiar)], ["Veces que el profesor reabrió", String(R.reaperturas)],
-      ["Teclas de escritura", String(R.teclas)], ["Borrados (Retroceso y Suprimir)", String(R.borrados)], ["Flechas y teclas de moverse", String(R.flechas)],
-      ["Ratio de edición (borrados + flechas / teclas)", String(R.ratio_edicion)],
-      ["Velocidad media en toda la prueba", R.cpm_global+" pulsaciones por minuto"], ["Velocidad mientras escribe", R.cpm_activo+" pulsaciones por minuto"],
-      ["Tiempo medio entre teclas", R.intervalo_medio_ms+" ms (desvío "+R.desvio_ms+" ms)"], ["Teclas a menos de 35 ms (ráfagas)", String(R.rafagas_rapidas)],
-      ["Pausas de más de 5 s dentro de una respuesta", R.pausas_largas+(R.pausas_largas ? " (media "+R.pausa_media_s+" s)" : "")],
-      ["Saltos de texto (15 o más caracteres de golpe)", String(R.saltos_texto)],
-      ["Índice de estilo IA (orientativo)", R.indice_ia]
-    ]);
-    const ids = Object.keys(S.m.f).filter(id => S.resp[id] !== undefined);
-    if(ids.length){
-      titulo("Por respuesta", 11.5);
-      tabla([{t:"Resp.", w:.08},{t:"Letras", w:.09},{t:"Teclas", w:.09},{t:"Borr.", w:.08},{t:"Pausas", w:.09},{t:"Saltos", w:.08},{t:"IA", w:.09},{t:"Por qué (IA)", w:.40}],
-        ids.map(id => { const f = S.m.f[id], ia = R.ia[id] || {nivel:"Bajo", mot:[]}; return [id, String((S.resp[id]||"").length), String(f.k), String(f.bs+f.del), String(f.pz), String(f.saltos), ia.nivel, ia.mot.join("; ") || "-"]; }));
-    }
-    titulo("Eventos", 11.5);
-    tabla([{t:"Hora", w:.12},{t:"Minuto", w:.1},{t:"Evento", w:.36},{t:"Detalle", w:.42}],
-      S.eventos.map(e => [e.h, e.s >= 0 ? String(Math.floor(e.s/60))+":"+pad(e.s%60) : "", e.tipo, e.detalle || ""]));
-    if(S.capturas.length){
-      const campos = Object.keys(S.capturas[S.capturas.length-1].l);
-      titulo("Avance cada "+CONFIG.CAPTURA_SEG+" segundos (caracteres escritos)", 11.5);
-      const wc = campos.length ? .62/campos.length : 0;
-      tabla([{t:"Minuto", w:.1}].concat(campos.map(c => ({t:c, w:wc}))).concat([{t:"Marcadas", w:.1},{t:"Salto", w: campos.length ? .18 : .8}]),
-        S.capturas.map(c => [Math.floor(c.s/60)+":"+pad(c.s%60)].concat(campos.map(k => String(c.l[k]||0))).concat([String(c.marcadas), c.salto || ""])));
-    }
+    const R = resumen();
+    const raros = Object.keys(R.ia).filter(id => { const f = S.m.f[id] || {}; return (f.saltos||0) > 0 || (S.resp[id]||"").trim().length > (f.k||0)*1.1 + 5; })
+      .map(id => id+" ("+(S.m.f[id] && S.m.f[id].saltos ? S.m.f[id].maxSalto+" letras de golpe" : "más letras que teclas")+")");
+    const altas = Object.keys(R.ia).filter(id => R.ia[id].nivel !== "Bajo").map(id => id+": "+R.ia[id].nivel);
+    const filas = [
+      ["Entrega", est+" · usó "+dur+" de "+minutosTotales()+" minutos"],
+      ["Salidas de la página", R.salidas ? R.salidas+" (afuera "+R.segundos_afuera+" s en total)" : "Ninguna"],
+      ["Intentos de copiar o pegar", R.intentos_copiar ? String(R.intentos_copiar) : "Ninguno"],
+      ["Texto que apareció sin tipearlo", raros.length ? "Sí, en "+raros.join(", ") : "No"],
+      ["Estilo IA (orientativo)", R.indice_ia+(altas.length ? " — "+altas.join(", ") : "")]
+    ];
+    if(R.reaperturas) filas.push(["El profesor la reabrió", R.reaperturas+(R.reaperturas === 1 ? " vez" : " veces")]);
+    y -= 8; lugar(170);
+    titulo("Para el profesor", 12);
+    tabla([{t:"Dato", w:.34},{t:"Resultado", w:.66}], filas);
+    texto("Son indicios para mirar con cuidado, no pruebas. El registro completo va guardado adentro de este PDF.", {size: 8.5, color: GRIS});
   }
   // ---------- datos completos adentro del PDF (para el análisis del docente) ----------
   try{ const datos = armarEnvio("pdf"); doc.setSubject("Respuestas y registro de la prueba "+S.codigo); doc.setKeywords([S.codigo, S.grupo, est]);

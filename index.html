@@ -117,7 +117,17 @@ textarea{width:100%;font:inherit;font-size:18px;padding:10px 12px;border:2px sol
   .encerrar{grid-template-columns:repeat(2,1fr)}
   .sino{grid-template-columns:1fr 1fr}
   .sino .fr{grid-column:1/-1}
-  .unir{grid-template-columns:1fr 40px 1fr}
+  .unir{grid-template-columns:minmax(0,1fr) 26px minmax(0,1fr)}
+  .unir .izq,.unir .dch{min-width:0;font-size:14px;padding:4px}
+  .unir .izq .bl{font-size:13px;padding:4px 6px}
+  .unir .dch svg,.unir .izq .bl svg{width:20px;height:20px}
+  .unir .punto{width:16px;height:16px}
+  .bl{white-space:normal}
+  .cb{max-width:100%}
+  .cab{flex-wrap:wrap}
+  .enun{min-width:0}
+  .escuchar{margin-left:auto}
+  .preg{padding:14px 12px}
 }
 </style>
 </head>
@@ -157,7 +167,7 @@ const CONFIG = {
   LIMITE_SALIDAS: 3,            // 0 = solo registrar · 1 = cerrar a la primera salida · 3 = cerrar a la tercera
   BLOQUEAR_COPIAR: true,        // bloquea copiar, pegar, cortar y clic derecho (con aviso)
   AYUDAS: false,                // textos de ayuda dentro de los cuadros de respuesta
-  PERMITIR_CELULAR: false,      // false = no deja hacer la prueba desde un celular
+  PERMITIR_CELULAR: true,       // false = no deja hacer la prueba desde un celular
   LEER_EN_VOZ: true,            // botón "Escuchar" en cada pregunta
   INFORME_EN_PDF: true,         // agrega el informe docente al final del PDF
   CAPTURA_SEG: 45,              // cada cuántos segundos se guarda el avance de cada respuesta
@@ -298,7 +308,10 @@ function pantallaContinuar(){
 }
 
 /* ===================== pantalla completa ===================== */
-function pedirFs(){ const d = document.documentElement; if(d.requestFullscreen && !document.fullscreenElement) d.requestFullscreen().catch(()=>{}); }
+function pedirFs(){ const d = document.documentElement; if(d.requestFullscreen && !document.fullscreenElement) d.requestFullscreen().catch(()=>{}); pantallaEncendida(); }
+let wakeLock = null;
+async function pantallaEncendida(){ try{ if("wakeLock" in navigator && !wakeLock){ wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); } }catch(e){} }
+document.addEventListener("visibilitychange", () => { if(!document.hidden && S && S.estado === "prueba") pantallaEncendida(); });
 document.addEventListener("fullscreenchange", () => {
   if(!S || S.estado !== "prueba") return $("#avisoFs").classList.add("oculto");
   if(!document.fullscreenElement){ log("salió de pantalla completa"); $("#avisoFs").classList.remove("oculto"); }
@@ -481,7 +494,15 @@ window.addEventListener("resize", () => requestAnimationFrame(dibujarLineas));
 function F(id){ return S.m.f[id] || (S.m.f[id] = {k:0,bs:0,del:0,nav:0,n:0,mean:0,M2:0,fast:0,pz:0,pzT:0,act:0,first:null,last:null,saltos:0,maxSalto:0,len:0,lastKey:0}); }
 function welford(o, x){ o.n++; const d = x - o.mean; o.mean += d/o.n; o.M2 += d*(x - o.mean); }
 const desvio = o => o.n > 1 ? Math.sqrt(o.M2/(o.n-1)) : 0;
-let lastKeyT = {};
+let lastKeyT = {}, teclaFisica = {};
+function marcarTiempo(id, f, g, now){
+  const s = seg(); if(f.first === null) f.first = s; f.last = s;
+  const prev = lastKeyT[id];
+  if(prev){ const dt = now - prev;
+    if(dt <= 5000){ welford(f, dt); welford(g, dt); f.act += dt; g.act += dt; if(dt < 35){ f.fast++; g.fast++; } }
+    else if(dt <= 180000){ f.pz++; f.pzT += dt; g.pz++; g.pzT += dt; } }
+  lastKeyT[id] = now;
+}
 document.addEventListener("keydown", e => {
   if(!S || S.estado !== "prueba") return;
   const k = e.key, ctrl = e.ctrlKey || e.metaKey;
@@ -493,18 +514,14 @@ document.addEventListener("keydown", e => {
     return;
   }
   const t = e.target; if(!t.matches || !t.matches("textarea[data-f]")) return;
-  const id = t.dataset.f, f = F(id), g = S.m.g, now = performance.now(), s = seg();
+  const id = t.dataset.f, f = F(id), g = S.m.g, now = performance.now();
   if(k.length === 1 && !ctrl){ f.k++; g.k++; }
   else if(k === "Backspace"){ f.bs++; g.bs++; }
   else if(k === "Delete"){ f.del++; g.del++; }
   else if(/^Arrow|^Home$|^End$|^PageUp$|^PageDown$/.test(k)){ f.nav++; g.nav++; }
-  else return;
-  if(f.first === null) f.first = s; f.last = s;
-  const prev = lastKeyT[id];
-  if(prev){ const dt = now - prev;
-    if(dt <= 5000){ welford(f, dt); welford(g, dt); f.act += dt; g.act += dt; if(dt < 35){ f.fast++; g.fast++; } }
-    else if(dt <= 180000){ f.pz++; f.pzT += dt; g.pz++; g.pzT += dt; } }
-  lastKeyT[id] = now;
+  else return;   // el teclado del celular manda "Unidentified": eso se cuenta en "input"
+  teclaFisica[id] = now;
+  marcarTiempo(id, f, g, now);
 }, true);
 document.addEventListener("focusin", e => { if(e.target.matches && e.target.matches("textarea[data-f]")) lastKeyT[e.target.dataset.f] = 0; });
 document.addEventListener("beforeinput", e => {
@@ -513,7 +530,13 @@ document.addEventListener("beforeinput", e => {
 });
 document.addEventListener("input", e => {
   const t = e.target; if(!S || !t.matches || !t.matches("textarea[data-f]")) return;
-  const id = t.dataset.f, f = F(id), L = t.value.length, d = L - f.len;
+  const id = t.dataset.f, f = F(id), L = t.value.length, d = L - f.len, now = performance.now();
+  // teclado del celular: no avisa cada tecla, así que se cuenta por lo que cambió el texto
+  if(S.estado === "prueba" && now - (teclaFisica[id]||0) > 80){
+    const g = S.m.g;
+    if(d > 0 && d < 15){ f.k += d; g.k += d; marcarTiempo(id, f, g, now); }
+    else if(d < 0){ f.bs++; g.bs++; marcarTiempo(id, f, g, now); }
+  }
   if(d >= 15){ f.saltos++; f.maxSalto = Math.max(f.maxSalto, d); log("salto de texto", "respuesta "+id+": aparecieron "+d+" caracteres de golpe"); }
   f.len = L; S.resp[id] = t.value; S.dirty = true; guardar();
 });

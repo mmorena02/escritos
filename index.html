@@ -112,6 +112,31 @@ textarea{width:100%;font:inherit;font-size:18px;padding:10px 12px;border:2px sol
 .estado-envio.error{background:#ffebee;color:var(--rojo)}
 .docente{margin-top:22px;border-top:1px dashed var(--borde);padding-top:16px}
 .docente input{width:220px;font-size:20px;padding:8px 10px;border:2px solid var(--borde);border-radius:8px}
+/* accesibilidad */
+body.todo-mayus, body.todo-mayus input, body.todo-mayus textarea, body.todo-mayus button{text-transform:uppercase}
+#accBtn{position:fixed;left:14px;bottom:14px;z-index:40;background:#fff;color:#12324f;border:2px solid #12324f;border-radius:12px;padding:8px 14px;font-weight:bold;font-size:16px;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+#accPanel{position:fixed;left:14px;bottom:66px;z-index:41;background:#fff;border:2px solid #12324f;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;width:260px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+#accPanel .t{font-weight:bold;margin:0 0 2px}
+#accPanel button{display:flex;justify-content:space-between;align-items:center;gap:10px;border:2px solid var(--borde);border-radius:10px;background:#fff;padding:10px 12px;font-size:17px;font-weight:bold;text-align:left;color:#1a1a1a}
+#accPanel button .est{font-size:14px;font-weight:normal;color:var(--gris);text-transform:none}
+#accPanel button.on{border-color:var(--azul);background:var(--azul-claro)}
+body.contraste{background:#000;color:#fff}
+body.contraste .tarjeta,body.contraste .preg{background:#000;border:2px solid #fff;color:#fff}
+body.contraste .sub,body.contraste .datos b,body.contraste .escuchar{color:#fff}
+body.contraste textarea,body.contraste input.txt,body.contraste .docente input{background:#000;color:#fff;border-color:#fff}
+body.contraste .op,body.contraste .unir .dch,body.contraste .escuchar{background:#000;color:#fff;border-color:#fff}
+body.contraste .op:hover,body.contraste .op.sel{background:#000;border-color:#ffeb3b;outline:3px solid #ffeb3b}
+body.contraste .op .caja{border-color:#fff;background:#000;color:#ffeb3b}
+body.contraste pre.codigo{background:#000;color:#fff;border-color:#fff}
+body.contraste .inst,body.contraste .reglas{background:#ffeb3b;color:#000;border-color:#ffeb3b}
+body.contraste .unir .punto{background:#fff;box-shadow:0 0 0 2px #fff}
+body.contraste .unir .izq.activo{background:#000;border-color:#ffeb3b}
+body.contraste .btn.sec{background:#000;color:#fff;border-color:#fff}
+body.contraste #accBtn,body.contraste #accPanel,body.contraste #accPanel button{background:#000;color:#fff;border-color:#fff}
+body.contraste #accPanel button.on{border-color:#ffeb3b;background:#222}
+body.contraste #accPanel button .est{color:#ddd}
+body.contraste .error{color:#ff8a80}
+body.contraste input:focus,body.contraste textarea:focus{outline:3px solid #ffeb3b}
 @media (max-width:640px){
   html,body{font-size:17px}
   .encerrar{grid-template-columns:repeat(2,1fr)}
@@ -137,6 +162,13 @@ textarea{width:100%;font:inherit;font-size:18px;padding:10px 12px;border:2px sol
   <div class="der"><span id="salidasTxt" class="oculto"></span><span id="reloj">--:--</span></div>
 </div>
 <main id="app"></main>
+<button id="accBtn" type="button" aria-expanded="false">Aa · Accesibilidad</button>
+<div id="accPanel" class="oculto" role="dialog" aria-label="Accesibilidad">
+  <p class="t">Accesibilidad</p>
+  <button type="button" id="accMayus">MAYÚSCULAS <span class="est"></span></button>
+  <button type="button" id="accLetra">Letra más grande <span class="est"></span></button>
+  <button type="button" id="accContraste">Alto contraste <span class="est"></span></button>
+</div>
 <div id="avisoFs" class="oculto"><span>La prueba se hace en pantalla completa.</span><button class="btn" id="btnFs">Volver a pantalla completa</button></div>
 <div id="modal" class="oculto"><div class="caja-m"><h3 id="mTit"></h3><div id="mTxt"></div><div class="acciones" id="mAcc"></div></div></div>
 
@@ -269,7 +301,7 @@ async function entrar(cod, pin){
   const rec = DATA.d[code];
   if(!rec || !/^\d{4}$/.test(pin)){ err.textContent = "El código o la clave no están bien. Fijate en tu tarjeta."; return; }
   btn.disabled = true; err.textContent = "Abriendo la prueba…";
-  try{ P = await descifrar(code, pin, rec); }
+  try{ P = await descifrar(code, pin, rec); if(P.t === "pic1" || P.t === "pic2" || P.may){ ACC.mayus = true; aplicarAcc(); } }
   catch(e){ btn.disabled = false; err.textContent = "El código o la clave no están bien. Fijate en tu tarjeta."; return; }
   const previo = LS.get("ev_"+code);
   if(previo && previo.codigo === P.c){
@@ -478,12 +510,13 @@ function marcarUnir(){ document.querySelectorAll(".unir .izq").forEach(b => b.cl
 function dibujarLineas(){
   const u = document.querySelector(".unir"); if(!u) return;
   const svg = u.querySelector("svg.lineas"), R = u.getBoundingClientRect(); svg.innerHTML = "";
+  const z = u.offsetWidth ? R.width / u.offsetWidth : 1;
   for(const k in S.unir){
     const a = u.querySelector('[data-l="'+k+'"] .punto'), b = u.querySelector('[data-r="'+S.unir[k]+'"] .punto'); if(!a || !b) continue;
     const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
     const ln = document.createElementNS("http://www.w3.org/2000/svg","line");
-    ln.setAttribute("x1", ra.left+ra.width/2-R.left); ln.setAttribute("y1", ra.top+ra.height/2-R.top);
-    ln.setAttribute("x2", rb.left+rb.width/2-R.left); ln.setAttribute("y2", rb.top+rb.height/2-R.top);
+    ln.setAttribute("x1", (ra.left+ra.width/2-R.left)/z); ln.setAttribute("y1", (ra.top+ra.height/2-R.top)/z);
+    ln.setAttribute("x2", (rb.left+rb.width/2-R.left)/z); ln.setAttribute("y2", (rb.top+rb.height/2-R.top)/z);
     ln.setAttribute("stroke", COLORES[k%4]); ln.setAttribute("stroke-width","5"); ln.setAttribute("stroke-linecap","round");
     svg.appendChild(ln);
   }
@@ -908,7 +941,28 @@ async function generarPDF(){
 }
 
 /* ===================== arranque ===================== */
+/* ===================== accesibilidad ===================== */
+const ACC = Object.assign({mayus:false, letra:0, contraste:false}, LS.get("acc") || {});
+const LETRAS = [1, 1.15, 1.3];
+function aplicarAcc(){
+  document.body.classList.toggle("todo-mayus", !!ACC.mayus);
+  document.body.classList.toggle("contraste", !!ACC.contraste);
+  document.body.style.zoom = LETRAS[ACC.letra] === 1 ? "" : String(LETRAS[ACC.letra]);
+  const st = (id, on, txt) => { const b = $(id); b.classList.toggle("on", on); b.querySelector(".est").textContent = txt; };
+  st("#accMayus", ACC.mayus, ACC.mayus ? "activado" : "apagado");
+  st("#accLetra", ACC.letra > 0, ["normal","grande","muy grande"][ACC.letra]);
+  st("#accContraste", ACC.contraste, ACC.contraste ? "activado" : "apagado");
+  LS.set("acc", ACC);
+  requestAnimationFrame(dibujarLineas);
+}
+$("#accBtn").onclick = () => { const p = $("#accPanel"); p.classList.toggle("oculto"); $("#accBtn").setAttribute("aria-expanded", String(!p.classList.contains("oculto"))); };
+document.addEventListener("click", e => { if(!e.target.closest("#accPanel") && !e.target.closest("#accBtn")){ $("#accPanel").classList.add("oculto"); $("#accBtn").setAttribute("aria-expanded","false"); } });
+$("#accMayus").onclick = () => { ACC.mayus = !ACC.mayus; aplicarAcc(); if(S && S.estado === "prueba") log("accesibilidad", "mayúsculas "+(ACC.mayus?"sí":"no")); };
+$("#accLetra").onclick = () => { ACC.letra = (ACC.letra + 1) % LETRAS.length; aplicarAcc(); if(S && S.estado === "prueba") log("accesibilidad", "letra "+["normal","grande","muy grande"][ACC.letra]); };
+$("#accContraste").onclick = () => { ACC.contraste = !ACC.contraste; aplicarAcc(); if(S && S.estado === "prueba") log("accesibilidad", "alto contraste "+(ACC.contraste?"sí":"no")); };
+
 (function arranque(){
+  aplicarAcc();
   pantallaInicio();
   // reintenta envíos finales que quedaron pendientes en esta computadora
   LS.keys().filter(k => k.indexOf("ev_") === 0).forEach(k => { const st = LS.get(k); if(st && st.pendiente) reintentar(st); });
